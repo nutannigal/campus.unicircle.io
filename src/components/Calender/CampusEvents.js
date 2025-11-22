@@ -1,1570 +1,603 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import axios from "axios";
 import moment from "moment";
-export function CampusEvents() {
-  var Cevent = "";
 
-  const monthNames = [
-    "January",
-    "February",
-    "March",
-    "April",
-    "May",
-    "June",
-    "July",
-    "August",
-    "September",
-    "October",
-    "November",
-    "December",
-  ];
-
-  const currentMonth = new Date().getMonth() + 1;
-
-  const [selectedMonth, setSelectedMonth] = useState(currentMonth);
-
-  const [selectedMonthPrev, setSelectedMonthPrev] = useState(13);
-  const d = new Date();
-  const [currYear, setCurrYear] = useState(d.getFullYear());
-
-  const currMonth = moment(d).format("MMMM");
-  const [month, updateMonth] = useState(currMonth);
-
+// Custom hook for events data management
+const useEvents = () => {
   const token = localStorage.getItem("Token");
-  const [event, updateEvent] = useState([]);
-  const [error_code, updateError_code] = useState("");
-  const [error_message, updateError_message] = useState("");
+  const [events, setEvents] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
-  const currentDate = new Date();
-  const [currentMonth1, setCurrentMonth1] = useState(currentDate.getMonth());
-  const [currentYear, setCurrentYear] = useState(currentDate.getFullYear());
-  var eNow = new Date();
-  var eMoment = moment(eNow);
+  const [currentDate, setCurrentDate] = useState({
+    month: new Date().getMonth(),
+    year: new Date().getFullYear()
+  });
 
-  var lastYear = eMoment.format("YYYY") - 1;
-
-  var nextyear = moment()
-    .add(1, "years")
-    .format("YYYY");
-
-  var eventList = "";
-  var eventList_prev = "";
-
-  async function nextClick() {
-    let s_month = selectedMonth + 1;
-    let c_year = currYear;
-
-    let currentData = monthNames[s_month - 1];
-
-    updateMonth(currentData);
-    if (s_month == 13) {
-      updateMonth("January");
-    }
-    if (s_month == 13) {
-      s_month = 1;
-      c_year = c_year + 1;
-
-      setCurrYear(c_year);
-    }
-
-    let result_month = monthNames[s_month - 1];
-    let result_year = c_year;
-    eventList = result_month + "," + " " + result_year;
-
-    setSelectedMonth(s_month);
-
-    fetchList(eventList);
-  }
-
-  async function prevClick() {
-    let s_month = selectedMonth - 1;
-    console.log("selected_month", s_month);
-    let c_year = currYear;
-    let currentData = monthNames[s_month - 1];
-
-    updateMonth(currentData);
-
-    if (s_month <= 0) {
-      s_month = 12;
-      c_year = c_year - 1;
-      setCurrYear(c_year);
-    }
-
-    console.log("dateTest Month:", monthNames[s_month - 1]);
-    console.log("dateTest Year:", c_year);
-
-    let result_month = monthNames[s_month - 1];
-    let result_year = c_year;
-    eventList = result_month + "," + " " + result_year;
-
-    console.log("date result:", eventList);
-
-    setSelectedMonth(s_month);
-
-    fetchList(eventList);
-  }
-
-  async function fetchList(data) {
-
+  const apiCall = useCallback(async (endpoint, data = null) => {
     try {
-      updateEvent([]);
-      const formData = new FormData();
-      formData.append("month", data);
-      const fetchResponse = await axios.post(
-        process.env.REACT_APP_API_KEY + "admin_get_monthwise_event_list",
-        formData,
-        {
-          headers: {
-            "Content-Type": "multipart/form-data",
-            Authorization: token,
-          },
-        }
-      );
+      const config = {
+        method: "POST",
+        url: `${process.env.REACT_APP_API_KEY}${endpoint}`,
+        headers: {
+          "Content-Type": "multipart/form-data",
+          Authorization: token,
+        },
+        ...(data && { data })
+      };
 
-      // console.log("momthwise events-------------",fetchResponse);
-      updateError_message(fetchResponse.data.message);
-      updateError_code(fetchResponse.data.error_code);
-      if(fetchResponse.data.error_code == 200){
-        updateEvent(fetchResponse.data.data);
-      }else{
-        updateEvent([]);
+      const response = await axios(config);
+      return {
+        success: response.data.error_code === 200,
+        data: response.data.data,
+        message: response.data.message
+      };
+    } catch (err) {
+      console.error("API Error:", err);
+      return { success: false, message: "Network error occurred" };
+    }
+  }, [token]);
+
+  const fetchEvents = useCallback(async (month, year) => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const formData = new FormData();
+      formData.append("month", `${month + 1},${year}`);
+      
+      const result = await apiCall("admin_get_monthwise_event_list", formData);
+      
+      if (result.success) {
+        setEvents(result.data || []);
+      } else {
+        setEvents([]);
+        setError(result.message || "No events found for this month");
       }
     } catch (err) {
-      console.log("Log in Fail", err);
+      setError("Failed to load events");
+      setEvents([]);
+    } finally {
+      setLoading(false);
     }
-  }
-  useEffect(() => {
-    let data = monthNames[selectedMonth - 1] + ", " + currYear;
-    // fetchList(data);
-    let t_string = (currentMonth1+1) + "," + currentYear;
-    fetchList(t_string);
+  }, [apiCall]);
+
+  const navigateMonth = useCallback((direction) => {
+    setCurrentDate(prev => {
+      let newMonth = prev.month;
+      let newYear = prev.year;
+
+      if (direction === 'next') {
+        newMonth++;
+        if (newMonth > 11) {
+          newMonth = 0;
+          newYear++;
+        }
+      } else {
+        newMonth--;
+        if (newMonth < 0) {
+          newMonth = 11;
+          newYear--;
+        }
+      }
+
+      return { month: newMonth, year: newYear };
+    });
   }, []);
 
-  function set_d_prv() {
+  const getMonthName = useCallback((monthIndex) => {
+    return new Date(currentDate.year, monthIndex).toLocaleString("default", { month: "long" });
+  }, [currentDate.year]);
 
-    if (currentMonth1 === 0) {
-      let yyy = currentYear - 1;
-      setCurrentYear(yyy);
-      setCurrentMonth1(11);
-      fetchList((currentMonth1) + "," + currentYear);
+  return {
+    events,
+    loading,
+    error,
+    currentDate,
+    navigateMonth,
+    getMonthName,
+    fetchEvents,
+    setCurrentDate
+  };
+};
 
-    }else{
-    let mmm = currentMonth1 - 1;
-    setCurrentMonth1(mmm);
-    fetchList((currentMonth1) + "," + currentYear);
-  }}
+// Event Card Component
+const EventCard = React.memo(({ event }) => {
+  const { images, label, start_date, end_date, start_time, end_time, location } = event;
+  
+  const eventImage = useMemo(() => {
+    return images?.[0]?.image || require("../images/no_image.png");
+  }, [images]);
 
-  function set_d_nxt() {
-    if (currentMonth1 == 11) {
-      setCurrentMonth1(0);
-      let yy = currentYear + 1;
-      setCurrentYear(yy);
+  const formattedDates = useMemo(() => {
+    const start = moment(start_date).format("D MMM");
+    const end = moment(end_date).format("D MMM");
+    return { start, end };
+  }, [start_date, end_date]);
 
-      fetchList((currentMonth1+2) + "," + currentYear)
-    } else {
-      let mm = currentMonth1 + 1;
-      setCurrentMonth1(mm);
-      fetchList((currentMonth1+2) + "," + currentYear)
-    }
-  }
-
-  const monthName = new Date(currentYear, currentMonth1).toLocaleString(
-    "default",
-    { month: "long" }
-  );
   return (
-    <>
-
-              <div
-                className="col-md-12 p-0"
+    <div className="col-md-4 mt-1">
+      <div 
+        className="small-box event-card"
+        style={{
+          width: "100%",
+          paddingLeft: "10px",
+          background: "white",
+          minHeight: "75px",
+          boxShadow: "0px 1px 3px rgba(0, 0, 0, 0.1)",
+          borderRadius: "8px",
+          border: "1px solid #e9ecef",
+          transition: "all 0.2s ease",
+          cursor: "pointer"
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.transform = "translateY(-2px)";
+          e.currentTarget.style.boxShadow = "0px 4px 8px rgba(0, 0, 0, 0.15)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.transform = "translateY(0)";
+          e.currentTarget.style.boxShadow = "0px 1px 3px rgba(0, 0, 0, 0.1)";
+        }}
+      >
+        <div className="inner" style={{ height: "100%", padding: "0", margin: "0" }}>
+          <div className="row g-0">
+            <div className="col-4 d-flex align-items-center">
+              <img
+                src={eventImage}
+                alt={label}
                 style={{
-                  height: "100%",
-                  marginTop: "10PX",
+                  width: "70px",
+                  height: "50px",
+                  objectFit: "cover",
+                  borderRadius: "4px"
                 }}
-              >
-                <div
-                  className="small-box "
+                onError={(e) => {
+                  e.target.src = require("../images/no_image.png");
+                }}
+              />
+            </div>
+
+            <div className="col-8">
+              <div className="mt-1">
+                <h6
                   style={{
-                    padding: "0px",
-                    minHeight:"190px",
-                    boxShadow: "0px 2px 2px rgba(0, 0, 0, 0.2)",
-                    borderRadius: "0px 0px 5px 5px",
+                    fontSize: "12px",
+                    fontWeight: "600",
+                    margin: "0 0 4px 0",
+                    color: "#1F3977",
+                    lineHeight: "1.2",
+                    display: "-webkit-box",
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: "vertical",
+                    overflow: "hidden"
                   }}
+                  title={label}
                 >
-                  <div className="">
-                    <div>
-                      <div
-                        style={{
-                          background: "rgb(108, 122, 153)",
-                          color: "#fff",
-                          padding: "7px",
-                          display: "flex",
-                          justifyContent: "center",
-                        }}
-                      >
-                        <button
-                          id="prevMonth"
-                          onClick={set_d_prv}
-                          style={{
-                            marginRight: "25px",
-                            border: "none",
-                            background: "rgb(108, 122, 153)",
-                          }}
-                        >
-                          <img
-                            src="dist/img/prev_img.png"
-                            style={{ height: "18px", width: "18px" }}
-                          />
-                        </button>
-                        <div
-                          style={{
-                            display: "flex",
-                            gap: "5px",
-                            alignItems: "center",
-                            fontSize:"10px",
-                            fontWeight:"500"
-                          }}
-                        >
-                          <span>Campus Events in</span>
-                          <span id="">{monthName}</span>
-                          <span>{currentYear}</span>
-                        </div>
-
-                        <button
-                          onClick={set_d_nxt}
-                          id="nextMonth"
-                          style={{
-                            marginLeft: "25px",
-                            border: "none",
-                            background: "rgb(108, 122, 153)",
-                          }}
-                        >
-                          <img
-                            src="dist/img/next_img.png"
-                            style={{ height: "18px", width: "18px" }}
-                          />
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="event_inner_div" style={{padding:"10px 0px"}}>
-                      <div className="row m-0">
-                        {event == "" ? (
-                          <div
-                            style={{
-                              display: "flex",
-                              justifyContent: "center", minHeight: "100px",
-                            }}
-                          >
-                            <p style={{ fontSize: "10px", fontWeight: "500" }}>
-                              No Events This Month
-
-                            </p>
-                          </div>
-                        ) : (
-                          <>
-                            {event.map((item) => {
-                              let array = [];
-                              var s_date = moment(item.start_date).format("D MMM")
-                              var e_date = moment(item.end_date).format("D MMM")
-                              item.images.map((e) => {
-                                array.push(e.image);
-                              });
-
-                              return (
-                                <>
-                                  <div className="col-md-4 mt-1">
-                                    <div
-                                      className="small-box"
-                                      style={{
-                                        width: "100%",
-                                        paddingLeft: "10px",
-
-                                        background: "transparent",
-                                        // height: "100px",
-                                        minHeight: "75px",
-                                        boxShadow:
-                                          "0px 1px 1px rgba(0, 0, 0, 0.2)",
-                                        borderRadius: "3px",
-                                      }}
-                                    >
-                                      <div
-                                        className="inner"
-                                        style={{
-                                          height: "100%",
-                                          padding: "0",
-                                          margin: "0",
-                                        }}
-                                      >
-                                        <div className="row">
-                                          <div>
-                                            <div
-                                              className="col-md-4"
-                                              style={{
-                                                height: "100%",
-                                              }}
-                                            >
-                                              <div>
-                                                {array.length == 0 ? (
-                                                  <div>
-                                                    <img
-                                                      src={require("../images/no_image.png")}
-                                                      alt="Default"
-                                                      style={{
-                                                        padding: "5px",
-                                                        width: "70px",
-                                                        height: "50px",
-                                                      }}
-                                                    />
-                                                  </div>
-                                                ) : (
-                                                  <div>
-                                                    <img
-                                                      src={array[0]}
-                                                      style={{
-                                                        height: "50px",
-                                                        width: "70px",
-                                                      }}
-                                                    />
-                                                  </div>
-                                                )}
-                                              </div>
-                                            </div>
-
-                                            <div className="col-md-8">
-                                              <div className="mt-1">
-                                                <span
-                                                  style={{
-                                                    fontSize: "12px",
-                                                    fontWeight: "600",
-                                                    width:"190px",
-                                                    overflow:"hidden",
-                                                    whiteSpace:"nowrap",
-                                                    textOverflow:"ellipsis",
-                                                    display:"block"
-                                                  }}
-                                                >
-                                                  {item.label}
-                                                </span>
-                                              </div>
-
-                                                <p
-                                                  style={{
-                                                    fontSize: "9px",
-                                                    fontWeight: "500",
-                                                  }}
-                                                >
-                                                  <span style={{fontWeight:"600"}}>Start Date :  </span>
-                                                  {s_date}   -   {item.start_time}
-                                                </p>
-
-
-                                                <p
-                                                  style={{
-                                                    fontSize: "9px",
-                                                    fontWeight: "500",
-                                                  }}
-                                                > <span style={{fontWeight:"600"}}>End Date :  </span>
-                                                 {" "}{e_date}   -   {item.end_time}
-                                                </p>
-
-                                              <div
-                                                className=""
-                                                style={{
-                                                  display: "flex",
-                                                  gap: "5px",
-                                                  fontSize: "9px",
-                                                  fontWeight: "600",
-                                                }}
-                                              >
-                                                <span>{item.location}</span>
-                                                {/* <span>16:47:00</span>
-                                        <span></span>
-                                        <span>22:40:00</span> */}
-                                              </div>
-                                            </div>
-                                          </div>
-                                        </div>
-                                      </div>
-                                    </div>
-                                  </div>
-                                </>
-                              );
-                            })}
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                  {label}
+                </h6>
               </div>
 
-
-            {/* <div className="carousel slide" data-ride="carousel" id="event-carousel" data-interval="false">
-              <div className="carousel-inner">
-
-                <div className="carousel-item active">
-                  <div className="event-container " >
-                    <div className="event-header d-flex campus_event_carousel">
-                    <a className="" href="#event-carousel" role="button"
-               onClick={() => prevClick()}
-              data-slide="prev">
-
-              <span className="carousel-control-prev-icon" aria-hidden="true" />
-              <span className="sr-only">Previous</span>
-            </a>
-
-            <h1 className="ms-3 me-3">Campus Events in {currMonth} {currYear}</h1>
-
-                      <a className="" href="#event-carousel" role="button"
-
-           onClick={() =>
-             nextClick()
-           }
-           data-slide="next" >
-
-           <span className="carousel-control-next-icon" aria-hidden="true" />
-           <span className="sr-only">Next</span>
-         </a>
-
-                    </div>
-                    <div className="container event-item">
-                    <div className="row" >
-                        {
-
-                          event == null ?
-                          (
-                              <div>
-                              No Data Available.
-                            </div>
-                            ):
-
-                          (
-                            event.map((item) =>
-                            {
-                              const dateString = item.start_date;
-                              var date = new Date(dateString + 'T00:00:00');
-                              const options = {
-                                year: 'numeric', month: 'long', day: 'numeric'
-                              };
-
-                              const getDate = date.toLocaleString('en-US', options);
-                              const array = [];
-
-
-                              item.images.map((imgItme) => {
-                                array.push(imgItme.image)
-                              })
-                              return(
-                                <div className='col-md-6' >
-                               <div className="row mt-2" style={{ padding: "0", boxShadow: "0px 2px 2px rgba(0, 0, 0, 0.15)", height: "108px" }}>
-                                   <div className="col-md-5 event-date" style={{ padding: "0" }}>
-                                     {array == 0 ?
-                                        (
-                                          <div>
-                                            <img src={require('../images/no_image.png')} alt="Default" style={{ width: "100px", height: "100px" }} />
-
-                                          </div>
-                                        ) : (
-                                          <div>
-                                            <img src={array[0]} alt="No Image" style={{ width: "100px", height: "100px" }} />
-                                          </div>
-                                        )
-                                      }
-                                    </div>
-
-                                    <div className="col-md-7 event-desc" style={{ padding: "10px", fontWeight: "500" }}>
-                                      <div style={{ fontSize: "12px", fontWeight: "700" }}>{item.label}</div>
-                                      <div style={{ color: "rgba(0, 0, 0, 0.9)", fontSize: "10px" }}>{getDate}</div>
-                                      <div style={{ color: "rgba(0, 0, 0, 0.7)", fontSize: "12px", marginTop: '20px' }} className="d-flex">
-                                        <p>{item.location}, </p>
-                                        <p style={{marginLeft:"2px"}}>{item.start_time} - {item.end_time}</p>
-                                      </div>
-                                    </div>
-
-
-                                  </div>
-
-
-                                </div>
-                              )
-                            })
-                          )
-                          }
-
-                      </div>
-
-
-                    </div>
-
-                  </div>
+              <div style={{ fontSize: "9px", lineHeight: "1.3" }}>
+                <div style={{ marginBottom: "2px" }}>
+                  <span style={{ fontWeight: "600", color: "#495057" }}>Start: </span>
+                  <span style={{ color: "#6c757d" }}>
+                    {formattedDates.start} - {start_time}
+                  </span>
                 </div>
-
-                <div className="carousel-item">
-                  <div className="event-container">
-                  <div className="event-header d-flex campus_event_carousel">
-                    <a className="" href="#event-carousel" role="button"
-               onClick={() => prevClick()}
-              data-slide="prev">
-
-              <span className="carousel-control-prev-icon" aria-hidden="true" />
-              <span className="sr-only">Previous</span>
-            </a>
-
-            <h1 style={{margin:"0 10px"}}>Campus Events in {month} {currYear}</h1>
-
-                      <a className="" href="#event-carousel" role="button"
-
-           onClick={() =>
-             nextClick()
-           }
-           data-slide="next" >
-
-           <span className="carousel-control-next-icon" aria-hidden="true" />
-           <span className="sr-only">Next</span>
-         </a>
-
-                    </div>
-                    <div className="container event-item">
-                    <div className="row" >
-                        {
-
-                     event == null ?
-                          (
-                              <div>
-                           No Data Available.
-                            </div>
-                            ):
-
-                          (
-                            event.map((item) =>
-                            {
-                              const dateString = item.start_date;
-                              var date = new Date(dateString + 'T00:00:00');
-                              const options = {
-                                year: 'numeric', month: 'long', day: 'numeric'
-                              };
-
-                              const getDate = date.toLocaleString('en-US', options);
-                              const array = [];
-
-
-                              item.images.map((imgItme) => {
-                                array.push(imgItme.image)
-                              })
-                              return(
-                                <div className='col-md-6' >
-                               <div className="row mt-2" style={{ padding: "0", boxShadow: "0px 2px 2px rgba(0, 0, 0, 0.15)", height: "108px" }}>
-                                   <div className="col-md-5 event-date" style={{ padding: "0" }}>
-                                     {array == 0 ?
-                                        (
-                                          <div>
-                                            <img src={require('../images/no_image.png')} alt="Default" style={{ width: "100px", height: "100px" }} />
-
-                                          </div>
-                                        ) : (
-                                          <div>
-                                            <img src={array[0]} alt="No Image" style={{ width: "100px", height: "100px" }} />
-                                          </div>
-                                        )
-                                      }
-                                    </div>
-
-                                    <div className="col-md-7 event-desc" style={{ padding: "10px", fontWeight: "500" }}>
-                                      <div style={{ fontSize: "12px", fontWeight: "700" }}>{item.label}</div>
-                                      <div style={{ color: "rgba(0, 0, 0, 0.9)", fontSize: "10px" }}>{getDate}</div>
-                                      <div style={{ color: "rgba(0, 0, 0, 0.7)", fontSize: "12px", marginTop: '20px' }} className="d-flex">
-                                        <p>{item.location}, </p>
-                                        <p style={{marginLeft:"2px"}}>{item.start_time} - {item.end_time}</p>
-                                      </div>
-                                    </div>
-
-
-                                  </div>
-
-
-                                </div>
-                              )
-                            })
-                          )
-                          }
-
-                      </div>
-
-
-
-                    </div>
-                  </div>
+                <div style={{ marginBottom: "2px" }}>
+                  <span style={{ fontWeight: "600", color: "#495057" }}>End: </span>
+                  <span style={{ color: "#6c757d" }}>
+                    {formattedDates.end} - {end_time}
+                  </span>
                 </div>
-
-                <div className="carousel-item">
-                  <div className="event-container">
-                  <div className="event-header d-flex campus_event_carousel">
-                    <a className="" href="#event-carousel" role="button"
-               onClick={() => prevClick()}
-              data-slide="prev">
-
-              <span className="carousel-control-prev-icon" aria-hidden="true" />
-              <span className="sr-only">Previous</span>
-            </a>
-
-            <h1 style={{margin:"0px 10px"}}>Campus Events in {month} {currYear}</h1>
-
-                      <a className="" href="#event-carousel" role="button"
-
-           onClick={() =>
-             nextClick()
-           }
-           data-slide="next" >
-
-           <span className="carousel-control-next-icon" aria-hidden="true" />
-           <span className="sr-only">Next</span>
-         </a>
-
-                    </div>
-                    <div className="container event-item">
-                    <div className="row" >
-                        {
-
-                     event == null ?
-                          (
-                              <div>
-                           No Data Available.
-                            </div>
-                            ):
-
-                          (
-                            event.map((item) =>
-                            {
-                              const dateString = item.start_date;
-                              var date = new Date(dateString + 'T00:00:00');
-                              const options = {
-                                year: 'numeric', month: 'long', day: 'numeric'
-                              };
-
-                              const getDate = date.toLocaleString('en-US', options);
-                              const array = [];
-
-
-                              item.images.map((imgItme) => {
-                                array.push(imgItme.image)
-                              })
-                              return(
-                                <div className='col-md-6' >
-                               <div className="row mt-2" style={{ padding: "0", boxShadow: "0px 2px 2px rgba(0, 0, 0, 0.15)", height: "108px" }}>
-                                   <div className="col-md-5 event-date" style={{ padding: "0px"}}>
-                                     {array == 0 ?
-                                        (
-                                          <div>
-                                            <img src={require('../images/no_image.png')} alt="Default" style={{ width: "100px", height: "100px" }} />
-
-                                          </div>
-                                        ) : (
-                                          <div>
-                                            <img src={array[0]} alt="No Image" style={{ width: "100px", height: "100px" }} />
-                                          </div>
-                                        )
-                                      }
-                                    </div>
-
-                                    <div className="col-md-7 event-desc" style={{ padding: "10px", fontWeight: "500" }}>
-                                      <div style={{ fontSize: "12px", fontWeight: "700" }}>{item.label}</div>
-                                      <div style={{ color: "rgba(0, 0, 0, 0.9)", fontSize: "10px" }}>{getDate}</div>
-                                      <div style={{ color: "rgba(0, 0, 0, 0.7)", fontSize: "12px", marginTop: '20px' }} className="d-flex">
-                                        <p>{item.location}, </p>
-                                        <p style={{marginLeft:"2px"}}>{item.start_time} - {item.end_time}</p>
-                                      </div>
-                                    </div>
-
-
-                                  </div>
-
-
-                                </div>
-                              )
-                            })
-                          )
-                          }
-
-                      </div>
-
-
-                    </div>
-                  </div>
+                <div>
+                  <span style={{ fontWeight: "600", color: "#495057" }}>Location: </span>
+                  <span style={{ color: "#6c757d" }}>{location}</span>
                 </div>
-
-                <div className="carousel-item">
-                  <div className="event-container">
-                  <div className="event-header d-flex campus_event_carousel" >
-                    <a className="" href="#event-carousel" role="button"
-               onClick={() => prevClick()}
-              data-slide="prev">
-
-              <span className="carousel-control-prev-icon" aria-hidden="true" />
-              <span className="sr-only">Previous</span>
-            </a>
-
-            <h1 style={{margin:"0px 10px"}}>Campus Events in {month} {currYear}</h1>
-
-                      <a className="" href="#event-carousel" role="button"
-
-           onClick={() =>
-             nextClick()
-           }
-           data-slide="next" >
-
-           <span className="carousel-control-next-icon" aria-hidden="true" />
-           <span className="sr-only">Next</span>
-         </a>
-
-                    </div>
-                    <div className="container event-item">
-                    <div className="row" >
-                        {
-
-                     event == null ?
-                          (
-                              <div>
-                           No Data Available.
-                            </div>
-                            ):
-
-                          (
-                            event.map((item) =>
-                            {
-                              const dateString = item.start_date;
-                              var date = new Date(dateString + 'T00:00:00');
-                              const options = {
-                                year: 'numeric', month: 'long', day: 'numeric'
-                              };
-
-                              const getDate = date.toLocaleString('en-US', options);
-                              const array = [];
-
-
-                              item.images.map((imgItme) => {
-                                array.push(imgItme.image)
-                              })
-                              return(
-                                <div className='col-md-6' >
-                               <div className="row mt-2" style={{ padding: "0", boxShadow: "0px 2px 2px rgba(0, 0, 0, 0.15)", height: "108px" }}>
-                                   <div className="col-md-5 event-date " style={{ padding: "0" }}>
-                                     {array == 0 ?
-                                        (
-                                          <div>
-                                            <img src={require('../images/no_image.png')} alt="Default" style={{ width: "100px", height: "100px" }} />
-
-                                          </div>
-                                        ) : (
-                                          <div>
-                                            <img src={array[0]} alt="No Image" style={{ width: "100px", height: "100px" }} />
-                                          </div>
-                                        )
-                                      }
-                                    </div>
-
-                                    <div className="col-md-7 event-desc" style={{ padding: "10px", fontWeight: "500" }}>
-                                      <div style={{ fontSize: "12px", fontWeight: "700" }}>{item.label}</div>
-                                      <div style={{ color: "rgba(0, 0, 0, 0.9)", fontSize: "10px" }}>{getDate}</div>
-                                      <div style={{ color: "rgba(0, 0, 0, 0.7)", fontSize: "12px", marginTop: '20px' }} className="d-flex">
-                                        <p>{item.location}, </p>
-                                        <p style={{marginLeft:"2px"}}>{item.start_time} - {item.end_time}</p>
-                                      </div>
-                                    </div>
-
-
-                                  </div>
-
-
-                                </div>
-                              )
-                            })
-                          )
-                          }
-
-                      </div>
-
-
-
-                    </div>
-                  </div>
-                </div>
-
-                <div className="carousel-item">
-                  <div className="event-container">
-                  <div className="event-header d-flex campus_event_carousel" >
-                    <a className="" href="#event-carousel" role="button"
-               onClick={() => prevClick()}
-              data-slide="prev">
-
-              <span className="carousel-control-prev-icon" aria-hidden="true" />
-              <span className="sr-only">Previous</span>
-            </a>
-
-            <h1 style={{margin:"0px 10px"}}>Campus Events in {month} {currYear}</h1>
-
-                      <a className="" href="#event-carousel" role="button"
-
-           onClick={() =>
-             nextClick()
-           }
-           data-slide="next" >
-
-           <span className="carousel-control-next-icon" aria-hidden="true" />
-           <span className="sr-only">Next</span>
-         </a>
-
-                    </div>
-                    <div className="container event-item">
-                    <div className="row" >
-                        {
-
-                     event == null ?
-                          (
-                              <div>
-                           No Data Available.
-                            </div>
-                            ):
-
-                          (
-                            event.map((item) =>
-                            {
-                              const dateString = item.start_date;
-                              var date = new Date(dateString + 'T00:00:00');
-                              const options = {
-                                year: 'numeric', month: 'long', day: 'numeric'
-                              };
-
-                              const getDate = date.toLocaleString('en-US', options);
-                              const array = [];
-
-
-                              item.images.map((imgItme) => {
-                                array.push(imgItme.image)
-                              })
-                              return(
-                                <div className='col-md-6' >
-                               <div className="row mt-2" style={{ padding: "0", boxShadow: "0px 2px 2px rgba(0, 0, 0, 0.15)", height: "108px" }}>
-                                   <div className="col-md-5 event-date" style={{ padding: "0" }}>
-                                     {array == 0 ?
-                                        (
-                                          <div>
-                                            <img src={require('../images/no_image.png')} alt="Default" style={{ width: "100px", height: "100px" }} />
-
-                                          </div>
-                                        ) : (
-                                          <div>
-                                            <img src={array[0]} alt="No Image" style={{ width: "100px", height: "100px" }} />
-                                          </div>
-                                        )
-                                      }
-                                    </div>
-
-                                    <div className="col-md-7 event-desc" style={{ padding: "10px", fontWeight: "500" }}>
-                                      <div style={{ fontSize: "12px", fontWeight: "700" }}>{item.label}</div>
-                                      <div style={{ color: "rgba(0, 0, 0, 0.9)", fontSize: "10px" }}>{getDate}</div>
-                                      <div style={{ color: "rgba(0, 0, 0, 0.7)", fontSize: "12px", marginTop: '20px' }} className="d-flex">
-                                        <p>{item.location}, </p>
-                                        <p style={{marginLeft:"2px"}}>{item.start_time} - {item.end_time}</p>
-                                      </div>
-                                    </div>
-
-
-                                  </div>
-
-
-                                </div>
-                              )
-                            })
-                          )
-                          }
-
-                      </div>
-
-
-
-                    </div>
-                  </div>
-                </div>
-
-                <div className="carousel-item">
-                  <div className="event-container">
-                  <div className="event-header d-flex campus_event_carousel" >
-                    <a className="" href="#event-carousel" role="button"
-               onClick={() => prevClick()}
-              data-slide="prev">
-
-              <span className="carousel-control-prev-icon" aria-hidden="true" />
-              <span className="sr-only">Previous</span>
-            </a>
-
-            <h1 style={{margin:"0px 10px"}}>Campus Events in {month} {currYear}</h1>
-
-                      <a className="" href="#event-carousel" role="button"
-
-           onClick={() =>
-             nextClick()
-           }
-           data-slide="next" >
-
-           <span className="carousel-control-next-icon" aria-hidden="true" />
-           <span className="sr-only">Next</span>
-         </a>
-
-                    </div>
-                    <div className="container event-item">
-                    <div className="row" >
-                        {
-
-                         event == null ?
-
-                          (
-                            <div>
-                           No Data Available.
-                          </div>
-                            ):
-
-                          (
-                            event.map((item) =>
-                            {
-                              const dateString = item.start_date;
-                              var date = new Date(dateString + 'T00:00:00');
-                              const options = {
-                                year: 'numeric', month: 'long', day: 'numeric'
-                              };
-
-                              const getDate = date.toLocaleString('en-US', options);
-                              const array = [];
-
-
-                              item.images.map((imgItme) => {
-                                array.push(imgItme.image)
-                              })
-                              return(
-                                <div className='col-md-6' >
-                               <div className="row mt-2" style={{ padding: "0", boxShadow: "0px 2px 2px rgba(0, 0, 0, 0.15)", height: "108px" }}>
-                                   <div className="col-md-5 event-date" style={{ padding: "0" }}>
-                                     {array == 0 ?
-                                        (
-                                          <div>
-                                            <img src={require('../images/no_image.png')} alt="Default" style={{ width: "100px", height: "100px" }} />
-
-                                          </div>
-                                        ) : (
-                                          <div>
-                                            <img src={array[0]} alt="No Image" style={{ width: "100px", height: "100px" }} />
-                                          </div>
-                                        )
-                                      }
-                                    </div>
-
-                                    <div className="col-md-7 event-desc" style={{ padding: "10px", fontWeight: "500" }}>
-                                      <div style={{ fontSize: "12px", fontWeight: "700" }}>{item.label}</div>
-                                      <div style={{ color: "rgba(0, 0, 0, 0.9)", fontSize: "10px" }}>{getDate}</div>
-                                      <div style={{ color: "rgba(0, 0, 0, 0.7)", fontSize: "12px", marginTop: '20px' }} className="d-flex">
-                                        <p>{item.location}, </p>
-                                        <p style={{marginLeft:"2px"}}>{item.start_time} - {item.end_time}</p>
-                                      </div>
-                                    </div>
-
-
-                                  </div>
-
-
-                                </div>
-                              )
-                            })
-                          )
-                          }
-
-                      </div>
-
-
-
-                    </div>
-                  </div>
-                </div>
-
-                <div className="carousel-item">
-                  <div className="event-container">
-                  <div className="event-header d-flex campus_event_carousel">
-                    <a className="" href="#event-carousel" role="button"
-               onClick={() => prevClick()}
-              data-slide="prev">
-
-              <span className="carousel-control-prev-icon" aria-hidden="true" />
-              <span className="sr-only">Previous</span>
-            </a>
-
-            <h1 style={{margin:"0px 10px"}}>Campus Events in {month} {currYear}</h1>
-
-                      <a className="" href="#event-carousel" role="button"
-
-           onClick={() =>
-             nextClick()
-           }
-           data-slide="next" >
-
-           <span className="carousel-control-next-icon" aria-hidden="true" />
-           <span className="sr-only">Next</span>
-         </a>
-
-                    </div>
-                    <div className="container event-item">
-                    <div className="row" >
-                        {
-
-                     event == null ?
-                          (
-                              <div>
-                           No Data Available.
-                            </div>
-                            ):
-
-                          (
-                            event.map((item) =>
-                            {
-                              const dateString = item.start_date;
-                              var date = new Date(dateString + 'T00:00:00');
-                              const options = {
-                                year: 'numeric', month: 'long', day: 'numeric'
-                              };
-
-                              const getDate = date.toLocaleString('en-US', options);
-                              const array = [];
-
-
-                              item.images.map((imgItme) => {
-                                array.push(imgItme.image)
-                              })
-                              return(
-                                <div className='col-md-6' >
-                               <div className="row mt-2" style={{ padding: "0", boxShadow: "0px 2px 2px rgba(0, 0, 0, 0.15)", height: "108px" }}>
-                                   <div className="col-md-5 event-date" style={{ padding: "0" }}>
-                                     {array == 0 ?
-                                        (
-                                          <div>
-                                            <img src={require('../images/no_image.png')} alt="Default" style={{ width: "100px", height: "100px" }} />
-
-                                          </div>
-                                        ) : (
-                                          <div>
-                                            <img src={array[0]} alt="No Image" style={{ width: "100px", height: "100px" }} />
-                                          </div>
-                                        )
-                                      }
-                                    </div>
-
-                                    <div className="col-md-7 event-desc" style={{ padding: "10px", fontWeight: "500" }}>
-                                      <div style={{ fontSize: "12px", fontWeight: "700" }}>{item.label}</div>
-                                      <div style={{ color: "rgba(0, 0, 0, 0.9)", fontSize: "10px" }}>{getDate}</div>
-                                      <div style={{ color: "rgba(0, 0, 0, 0.7)", fontSize: "12px", marginTop: '20px' }} className="d-flex">
-                                        <p>{item.location}, </p>
-                                        <p style={{marginLeft:"2px"}}>{item.start_time} - {item.end_time}</p>
-                                      </div>
-                                    </div>
-
-
-                                  </div>
-
-
-                                </div>
-                              )
-                            })
-                          )
-                          }
-
-                      </div>
-
-
-                    </div>
-                  </div>
-                </div>
-
-                <div className="carousel-item">
-                  <div className="event-container">
-                  <div className="event-header d-flex campus_event_carousel" >
-                    <a className="" href="#event-carousel" role="button"
-               onClick={() => prevClick()}
-              data-slide="prev">
-
-              <span className="carousel-control-prev-icon" aria-hidden="true" />
-              <span className="sr-only">Previous</span>
-            </a>
-
-            <h1 style={{margin:"0px 10px"}}>Campus Events in {month} {currYear}</h1>
-
-                      <a className="" href="#event-carousel" role="button"
-
-           onClick={() =>
-             nextClick()
-           }
-           data-slide="next" >
-
-           <span className="carousel-control-next-icon" aria-hidden="true" />
-           <span className="sr-only">Next</span>
-         </a>
-
-                    </div>
-                    <div className="container event-item">
-                    <div className="row" >
-                        {
-
-                     event == null ?
-                          (
-                              <div>
-                            No Data Available.
-                            </div>
-                            ):
-
-                          (
-                            event.map((item) =>
-                            {
-                              const dateString = item.start_date;
-                              var date = new Date(dateString + 'T00:00:00');
-                              const options = {
-                                year: 'numeric', month: 'long', day: 'numeric'
-                              };
-
-                              const getDate = date.toLocaleString('en-US', options);
-                              const array = [];
-
-
-                              item.images.map((imgItme) => {
-                                array.push(imgItme.image)
-                              })
-                              return(
-                                <div className='col-md-6' >
-                               <div className="row mt-2" style={{ padding: "0", boxShadow: "0px 2px 2px rgba(0, 0, 0, 0.15)", height: "108px" }}>
-                                   <div className="col-md-5 event-date" style={{ padding: "0" }}>
-                                     {array == 0 ?
-                                        (
-                                          <div>
-                                            <img src={require('../images/no_image.png')} alt="Default" style={{ width: "100px", height: "100px" }} />
-
-                                          </div>
-                                        ) : (
-                                          <div>
-                                            <img src={array[0]} alt="No Image" style={{ width: "100px", height: "100px" }} />
-                                          </div>
-                                        )
-                                      }
-                                    </div>
-
-                                    <div className="col-md-7 event-desc" style={{ padding: "10px", fontWeight: "500" }}>
-                                      <div style={{ fontSize: "12px", fontWeight: "700" }}>{item.label}</div>
-                                      <div style={{ color: "rgba(0, 0, 0, 0.9)", fontSize: "10px" }}>{getDate}</div>
-                                      <div style={{ color: "rgba(0, 0, 0, 0.7)", fontSize: "12px", marginTop: '20px' }} className="d-flex">
-                                        <p>{item.location}, </p>
-                                        <p style={{marginLeft:"2px"}}>{item.start_time} - {item.end_time}</p>
-                                      </div>
-                                    </div>
-
-
-                                  </div>
-
-
-                                </div>
-                              )
-                            })
-                          )
-                          }
-
-                      </div>
-
-
-                    </div>
-                  </div>
-                </div>
-
-                <div className="carousel-item">
-                  <div className="event-container">
-                  <div className="event-header d-flex campus_event_carousel">
-                    <a className="" href="#event-carousel" role="button"
-               onClick={() => prevClick()}
-              data-slide="prev">
-
-              <span className="carousel-control-prev-icon" aria-hidden="true" />
-              <span className="sr-only">Previous</span>
-            </a>
-
-            <h1 style={{margin:"0px 10px"}}>Campus Events in {month} {currYear}</h1>
-
-                      <a className="" href="#event-carousel" role="button"
-
-           onClick={() =>
-             nextClick()
-           }
-           data-slide="next" >
-
-           <span className="carousel-control-next-icon" aria-hidden="true" />
-           <span className="sr-only">Next</span>
-         </a>
-
-                    </div>
-                    <div className="container event-item">
-                    <div className="row" >
-                        {
-
-                     event == null ?
-                          (
-                              <div>
-                        No Data Available.
-                            </div>
-                            ):
-
-                          (
-                            event.map((item) =>
-                            {
-                              const dateString = item.start_date;
-                              var date = new Date(dateString + 'T00:00:00');
-                              const options = {
-                                year: 'numeric', month: 'long', day: 'numeric'
-                              };
-
-                              const getDate = date.toLocaleString('en-US', options);
-                              const array = [];
-
-
-                              item.images.map((imgItme) => {
-                                array.push(imgItme.image)
-                              })
-                              return(
-                                <div className='col-md-6' >
-                               <div className="row mt-2" style={{ padding: "0", boxShadow: "0px 2px 2px rgba(0, 0, 0, 0.15)", height: "108px" }}>
-                                   <div className="col-md-5 event-date " style={{ padding: "0" }}>
-                                     {array == 0 ?
-                                        (
-                                          <div>
-                                            <img src={require('../images/no_image.png')} alt="Default" style={{ width: "100px", height: "100px" }} />
-
-                                          </div>
-                                        ) : (
-                                          <div>
-                                            <img src={array[0]} alt="No Image" style={{ width: "100px", height: "100px" }} />
-                                          </div>
-                                        )
-                                      }
-                                    </div>
-
-                                    <div className="col-md-7 event-desc" style={{ padding: "10px", fontWeight: "500" }}>
-                                      <div style={{ fontSize: "12px", fontWeight: "700" }}>{item.label}</div>
-                                      <div style={{ color: "rgba(0, 0, 0, 0.9)", fontSize: "10px" }}>{getDate}</div>
-                                      <div style={{ color: "rgba(0, 0, 0, 0.7)", fontSize: "12px", marginTop: '20px' }} className="d-flex">
-                                        <p>{item.location}, </p>
-                                        <p style={{marginLeft:"2px"}}>{item.start_time} - {item.end_time}</p>
-                                      </div>
-                                    </div>
-
-
-                                  </div>
-
-
-                                </div>
-                              )
-                            })
-                          )
-                          }
-
-                      </div>
-
-
-                    </div>
-                  </div>
-                </div>
-
-                <div className="carousel-item">
-                  <div className="event-container">
-                  <div className="event-header d-flex campus_event_carousel">
-                    <a className="" href="#event-carousel" role="button"
-               onClick={() => prevClick()}
-              data-slide="prev">
-
-              <span className="carousel-control-prev-icon" aria-hidden="true" />
-              <span className="sr-only">Previous</span>
-            </a>
-
-            <h1 style={{margin:"0px 10px"}}>Campus Events in {month} {currYear}</h1>
-
-                      <a className="" href="#event-carousel" role="button"
-
-           onClick={() =>
-             nextClick()
-           }
-           data-slide="next" >
-
-           <span className="carousel-control-next-icon" aria-hidden="true" />
-           <span className="sr-only">Next</span>
-         </a>
-
-                    </div>
-                    <div className="container event-item">
-                    <div className="row" >
-                        {
-
-                     event == null ?
-                          (
-                              <div>
-                         No Data Available.
-                            </div>
-                            ):
-
-                          (
-                            event.map((item) =>
-                            {
-                              const dateString = item.start_date;
-                              var date = new Date(dateString + 'T00:00:00');
-                              const options = {
-                                year: 'numeric', month: 'long', day: 'numeric'
-                              };
-
-                              const getDate = date.toLocaleString('en-US', options);
-                              const array = [];
-
-
-                              item.images.map((imgItme) => {
-                                array.push(imgItme.image)
-                              })
-                              return(
-                                <div className='col-md-6' >
-                               <div className="row mt-2" style={{ padding: "0", boxShadow: "0px 2px 2px rgba(0, 0, 0, 0.15)", height: "108px" }}>
-                                   <div className="col-md-5 event-date" style={{ padding: "0" }}>
-                                     {array == 0 ?
-                                        (
-                                          <div>
-                                            <img src={require('../images/no_image.png')} alt="Default" style={{ width: "100px", height: "100px" }} />
-
-                                          </div>
-                                        ) : (
-                                          <div>
-                                            <img src={array[0]} alt="No Image" style={{ width: "100px", height: "100px" }} />
-                                          </div>
-                                        )
-                                      }
-                                    </div>
-
-                                    <div className="col-md-7 event-desc" style={{ padding: "10px", fontWeight: "500" }}>
-                                      <div style={{ fontSize: "12px", fontWeight: "700" }}>{item.label}</div>
-                                      <div style={{ color: "rgba(0, 0, 0, 0.9)", fontSize: "10px" }}>{getDate}</div>
-                                      <div style={{ color: "rgba(0, 0, 0, 0.7)", fontSize: "12px", marginTop: '20px' }} className="d-flex">
-                                        <p>{item.location}, </p>
-                                        <p style={{marginLeft:"2px"}}>{item.start_time} - {item.end_time}</p>
-                                      </div>
-                                    </div>
-
-
-                                  </div>
-
-
-                                </div>
-                              )
-                            })
-                          )
-                          }
-
-                      </div>
-
-
-                    </div>
-                  </div>
-                </div>
-
-                <div className="carousel-item">
-                  <div className="event-container">
-                  <div className="event-header d-flex campus_event_carousel">
-                    <a className="" href="#event-carousel" role="button"
-               onClick={() => prevClick()}
-              data-slide="prev">
-
-              <span className="carousel-control-prev-icon" aria-hidden="true" />
-              <span className="sr-only">Previous</span>
-            </a>
-
-            <h1 style={{margin:"0px 10px"}}>Campus Events in {month} {currYear}</h1>
-
-                      <a className="" href="#event-carousel" role="button"
-
-           onClick={() =>
-             nextClick()
-           }
-           data-slide="next" >
-
-           <span className="carousel-control-next-icon" aria-hidden="true" />
-           <span className="sr-only">Next</span>
-         </a>
-
-                    </div>
-                    <div className="container event-item">
-                    <div className="row" >
-                        {
-
-                     event == null ?
-                          (
-                              <div>
-                         No Data Available.
-                            </div>
-                            ):
-
-                          (
-                            event.map((item) =>
-                            {
-                              const dateString = item.start_date;
-                              var date = new Date(dateString + 'T00:00:00');
-                              const options = {
-                                year: 'numeric', month: 'long', day: 'numeric'
-                              };
-
-                              const getDate = date.toLocaleString('en-US', options);
-                              const array = [];
-
-
-                              item.images.map((imgItme) => {
-                                array.push(imgItme.image)
-                              })
-                              return(
-                                <div className='col-md-6' >
-                               <div className="row mt-2" style={{ padding: "0", boxShadow: "0px 2px 2px rgba(0, 0, 0, 0.15)", height: "108px" }}>
-                                   <div className="col-md-5 event-date" style={{ padding: "0" }}>
-                                     {array == 0 ?
-                                        (
-                                          <div>
-                                            <img src={require('../images/no_image.png')} alt="Default" style={{ width: "100px", height: "100px" }} />
-
-                                          </div>
-                                        ) : (
-                                          <div>
-                                            <img src={array[0]} alt="No Image" style={{ width: "100px", height: "100px" }} />
-                                          </div>
-                                        )
-                                      }
-                                    </div>
-
-                                    <div className="col-md-7 event-desc" style={{ padding: "10px", fontWeight: "500" }}>
-                                      <div style={{ fontSize: "12px", fontWeight: "700" }}>{item.label}</div>
-                                      <div style={{ color: "rgba(0, 0, 0, 0.9)", fontSize: "10px" }}>{getDate}</div>
-                                      <div style={{ color: "rgba(0, 0, 0, 0.7)", fontSize: "12px", marginTop: '20px' }} className="d-flex">
-                                        <p>{item.location}, </p>
-                                        <p style={{marginLeft:"2px"}}>{item.start_time} - {item.end_time}</p>
-                                      </div>
-                                    </div>
-
-
-                                  </div>
-
-
-                                </div>
-                              )
-                            })
-                          )
-                          }
-
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="carousel-item">
-                  <div className="event-container">
-                  <div className="event-header d-flex campus_event_carousel">
-                    <a className="" href="#event-carousel" role="button"
-               onClick={() => prevClick()}
-              data-slide="prev">
-
-              <span className="carousel-control-prev-icon" aria-hidden="true" />
-              <span className="sr-only">Previous</span>
-            </a>
-
-            <h1 style={{margin:"0px 10px"}}>Campus Events in {month} {currYear}</h1>
-
-                      <a className="" href="#event-carousel" role="button"
-
-           onClick={() =>
-             nextClick()
-           }
-           data-slide="next" >
-
-           <span className="carousel-control-next-icon" aria-hidden="true" />
-           <span className="sr-only">Next</span>
-         </a>
-
-                    </div>
-                    <div className="container event-item">
-                    <div className="row" >
-                        {
-
-                     event == null ?
-                          (
-                              <div>
-                            No Data Available.
-                            </div>
-                            ):
-
-                          (
-                            event.map((item) =>
-                            {
-                              const dateString = item.start_date;
-                              var date = new Date(dateString + 'T00:00:00');
-                              const options = {
-                                year: 'numeric', month: 'long', day: 'numeric'
-                              };
-
-                              const getDate = date.toLocaleString('en-US', options);
-                              const array = [];
-
-
-                              item.images.map((imgItme) => {
-                                array.push(imgItme.image)
-                              })
-                              return(
-                                <div className='col-md-6' >
-                               <div className="row mt-2" style={{ padding: "0", boxShadow: "0px 2px 2px rgba(0, 0, 0, 0.15)", height: "108px" }}>
-                                   <div className="col-md-5 event-date" style={{ padding: "0" }}>
-                                     {array == 0 ?
-                                        (
-                                          <div>
-                                            <img src={require('../images/no_image.png')} alt="Default" style={{ width: "100px", height: "100px" }} />
-
-                                          </div>
-                                        ) : (
-                                          <div>
-                                            <img src={array[0]} alt="No Image" style={{ width: "100px", height: "100px" }} />
-                                          </div>
-                                        )
-                                      }
-                                    </div>
-
-                                    <div className="col-md-7 event-desc" style={{ padding: "10px", fontWeight: "500" }}>
-                                      <div style={{ fontSize: "12px", fontWeight: "700" }}>{item.label}</div>
-                                      <div style={{ color: "rgba(0, 0, 0, 0.9)", fontSize: "10px" }}>{getDate}</div>
-                                      <div style={{ color: "rgba(0, 0, 0, 0.7)", fontSize: "12px", marginTop: '20px' }} className="d-flex">
-                                        <p>{item.location}, </p>
-                                        <p style={{marginLeft:"2px"}}>{item.start_time} - {item.end_time}</p>
-                                      </div>
-                                    </div>
-
-
-                                  </div>
-
-
-                                </div>
-                              )
-                            })
-                          )
-                          }
-
-
-                      </div>
-
-
-                    </div>
-                  </div>
-                </div>
-
-
               </div>
-            </div> */}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+});
 
+// Loading Skeleton Component
+const EventCardSkeleton = () => (
+  <div className="col-md-4 mt-1">
+    <div 
+      className="small-box"
+      style={{
+        width: "100%",
+        padding: "10px",
+        background: "white",
+        minHeight: "75px",
+        boxShadow: "0px 1px 3px rgba(0, 0, 0, 0.1)",
+        borderRadius: "8px",
+        border: "1px solid #e9ecef"
+      }}
+    >
+      <div className="row g-0">
+        <div className="col-4">
+          <div 
+            style={{
+              width: "70px",
+              height: "50px",
+              background: "#e9ecef",
+              borderRadius: "4px",
+              animation: "pulse 1.5s ease-in-out infinite"
+            }}
+          ></div>
+        </div>
+        <div className="col-8">
+          <div 
+            style={{
+              height: "12px",
+              background: "#e9ecef",
+              borderRadius: "4px",
+              marginBottom: "8px",
+              width: "80%",
+              animation: "pulse 1.5s ease-in-out infinite"
+            }}
+          ></div>
+          <div 
+            style={{
+              height: "8px",
+              background: "#e9ecef",
+              borderRadius: "4px",
+              marginBottom: "4px",
+              width: "60%",
+              animation: "pulse 1.5s ease-in-out infinite"
+            }}
+          ></div>
+          <div 
+            style={{
+              height: "8px",
+              background: "#e9ecef",
+              borderRadius: "4px",
+              width: "70%",
+              animation: "pulse 1.5s ease-in-out infinite"
+            }}
+          ></div>
+        </div>
+      </div>
+    </div>
+  </div>
+);
 
-        </>
+// Month Navigation Component
+const MonthNavigation = React.memo(({ currentDate, onNavigate, getMonthName, loading }) => {
+  const monthName = getMonthName(currentDate.month);
+
+  return (
+    <div
+      style={{
+        background: "rgb(108, 122, 153)",
+        color: "#fff",
+        padding: "12px 16px",
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        borderRadius: "8px 8px 0 0"
+      }}
+    >
+      <button
+        onClick={() => onNavigate('prev')}
+        disabled={loading}
+        style={{
+          marginRight: "25px",
+          border: "none",
+          background: "transparent",
+          cursor: loading ? "not-allowed" : "pointer",
+          opacity: loading ? 0.6 : 1,
+          padding: "4px",
+          borderRadius: "4px",
+          transition: "all 0.2s ease"
+        }}
+        onMouseEnter={(e) => {
+          if (!loading) e.currentTarget.style.background = "rgba(255,255,255,0.1)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = "transparent";
+        }}
+      >
+        <img
+          src="dist/img/prev_img.png"
+          alt="Previous month"
+          style={{ height: "18px", width: "18px", filter: "brightness(0) invert(1)" }}
+        />
+      </button>
+
+      <div
+        style={{
+          display: "flex",
+          gap: "8px",
+          alignItems: "center",
+          fontSize: "14px",
+          fontWeight: "600",
+          minWidth: "200px",
+          justifyContent: "center"
+        }}
+      >
+        <span>Campus Events in</span>
+        <span>{monthName}</span>
+        <span>{currentDate.year}</span>
+        {loading && (
+          <div 
+            className="spinner-border spinner-border-sm" 
+            style={{ width: "12px", height: "12px" }}
+            role="status"
+          >
+            <span className="visually-hidden">Loading...</span>
+          </div>
+        )}
+      </div>
+
+      <button
+        onClick={() => onNavigate('next')}
+        disabled={loading}
+        style={{
+          marginLeft: "25px",
+          border: "none",
+          background: "transparent",
+          cursor: loading ? "not-allowed" : "pointer",
+          opacity: loading ? 0.6 : 1,
+          padding: "4px",
+          borderRadius: "4px",
+          transition: "all 0.2s ease"
+        }}
+        onMouseEnter={(e) => {
+          if (!loading) e.currentTarget.style.background = "rgba(255,255,255,0.1)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = "transparent";
+        }}
+      >
+        <img
+          src="dist/img/next_img.png"
+          alt="Next month"
+          style={{ height: "18px", width: "18px", filter: "brightness(0) invert(1)" }}
+        />
+      </button>
+    </div>
+  );
+});
+
+// Empty State Component
+const EmptyState = ({ message }) => (
+  <div
+    style={{
+      display: "flex",
+      flexDirection: "column",
+      justifyContent: "center",
+      alignItems: "center",
+      minHeight: "120px",
+      padding: "20px",
+      color: "#6c757d"
+    }}
+  >
+    <div style={{ fontSize: "48px", color: "#e9ecef", marginBottom: "8px" }}>
+      📅
+    </div>
+    <p style={{ 
+      fontSize: "14px", 
+      fontWeight: "500", 
+      margin: "0",
+      textAlign: "center"
+    }}>
+      {message}
+    </p>
+    <p style={{ 
+      fontSize: "12px", 
+      color: "#adb5bd", 
+      margin: "4px 0 0 0",
+      textAlign: "center"
+    }}>
+      No events scheduled for this month
+    </p>
+  </div>
+);
+
+// Error State Component
+const ErrorState = ({ message, onRetry }) => (
+  <div
+    style={{
+      display: "flex",
+      flexDirection: "column",
+      justifyContent: "center",
+      alignItems: "center",
+      minHeight: "120px",
+      padding: "20px"
+    }}
+  >
+    <div style={{ fontSize: "36px", color: "#dc3545", marginBottom: "8px" }}>
+      ⚠️
+    </div>
+    <p style={{ 
+      fontSize: "14px", 
+      fontWeight: "500", 
+      margin: "0 0 12px 0",
+      color: "#dc3545",
+      textAlign: "center"
+    }}>
+      {message}
+    </p>
+    <button
+      onClick={onRetry}
+      style={{
+        border: "1px solid #dc3545",
+        background: "transparent",
+        color: "#dc3545",
+        padding: "6px 16px",
+        borderRadius: "4px",
+        fontSize: "12px",
+        fontWeight: "500",
+        cursor: "pointer",
+        transition: "all 0.2s ease"
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.background = "#dc3545";
+        e.currentTarget.style.color = "white";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = "transparent";
+        e.currentTarget.style.color = "#dc3545";
+      }}
+    >
+      Try Again
+    </button>
+  </div>
+);
+
+export function CampusEvents() {
+  const {
+    events,
+    loading,
+    error,
+    currentDate,
+    navigateMonth,
+    getMonthName,
+    fetchEvents,
+    setCurrentDate
+  } = useEvents();
+
+  // Fetch events when month/year changes
+  useEffect(() => {
+    fetchEvents(currentDate.month, currentDate.year);
+  }, [currentDate.month, currentDate.year, fetchEvents]);
+
+  // Handle navigation with loading state
+  const handleNavigate = useCallback((direction) => {
+    navigateMonth(direction);
+  }, [navigateMonth]);
+
+  // Quick navigation to current month
+  const goToCurrentMonth = useCallback(() => {
+    const now = new Date();
+    setCurrentDate({
+      month: now.getMonth(),
+      year: now.getFullYear()
+    });
+  }, [setCurrentDate]);
+
+  // Memoized events grid
+  const eventsGrid = useMemo(() => {
+    if (loading) {
+      return Array.from({ length: 6 }).map((_, index) => (
+        <EventCardSkeleton key={index} />
+      ));
+    }
+
+    if (error) {
+      return (
+        <div className="col-12">
+          <ErrorState 
+            message={error} 
+            onRetry={() => fetchEvents(currentDate.month, currentDate.year)} 
+          />
+        </div>
+      );
+    }
+
+    if (!events || events.length === 0) {
+      return (
+        <div className="col-12">
+          <EmptyState message="No Events This Month" />
+        </div>
+      );
+    }
+
+    return events.map((event, index) => (
+      <EventCard key={`${event.event_id || index}_${event.start_date}`} event={event} />
+    ));
+  }, [events, loading, error, currentDate, fetchEvents]);
+
+  return (
+    <div
+      className="col-md-12 p-0"
+      style={{
+        height: "100%",
+        marginTop: "10px",
+      }}
+    >
+      <div
+        className="small-box"
+        style={{
+          padding: "0px",
+          minHeight: "190px",
+          boxShadow: "0px 2px 4px rgba(0, 0, 0, 0.1)",
+          borderRadius: "8px",
+          background: "white",
+          overflow: "hidden"
+        }}
+      >
+        <div>
+          <MonthNavigation
+            currentDate={currentDate}
+            onNavigate={handleNavigate}
+            getMonthName={getMonthName}
+            loading={loading}
+          />
+
+          <div className="event_inner_div" style={{ padding: "16px" }}>
+            <div className="row m-0">
+              {eventsGrid}
+            </div>
+            
+            {/* Current Month Quick Action */}
+            {!loading && (
+              <div className="row m-0 mt-3">
+                <div className="col-12 text-center">
+                  <button
+                    onClick={goToCurrentMonth}
+                    style={{
+                      border: "1px solid #6C7A99",
+                      background: "transparent",
+                      color: "#6C7A99",
+                      padding: "6px 16px",
+                      borderRadius: "4px",
+                      fontSize: "11px",
+                      fontWeight: "500",
+                      cursor: "pointer",
+                      transition: "all 0.2s ease"
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = "#6C7A99";
+                      e.currentTarget.style.color = "white";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = "transparent";
+                      e.currentTarget.style.color = "#6C7A99";
+                    }}
+                  >
+                    Back to Current Month
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Add CSS for pulse animation */}
+      <style>
+        {`
+          @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+          }
+          
+          .event-card:hover {
+            transform: translateY(-2px);
+            transition: all 0.2s ease;
+          }
+        `}
+      </style>
+    </div>
   );
 }
+
+// Export with display name for better debugging
+CampusEvents.displayName = 'CampusEvents';
