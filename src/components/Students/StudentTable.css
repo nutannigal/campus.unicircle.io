@@ -1,0 +1,8 @@
+@media screen and (min-width: 250px) and (max-width :1280px) {
+    .stud_button{
+        width: 135px;
+        padding-top: 8px !important;
+        padding-bottom: 8px !important;
+        padding-left: 10px !important;
+    }
+}
